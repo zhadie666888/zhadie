@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>聊天 - 时代少年团AI聊天</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,"PingFang SC",sans-serif; background:#0f0f1a; color:#fff; padding-bottom:70px; }
+.header { padding:20px 16px 8px; display:flex; justify-content:space-between; align-items:center; }
+.header h2 { font-size:18px; color:#ffd700; }
+.btn { border:none; background:#6c5ce7; color:#fff; padding:8px 14px; border-radius:16px; font-size:12px; cursor:pointer; }
+.list { padding:8px 16px; }
+.friend-item { display:flex; align-items:center; gap:12px; padding:12px; background:#1a1a2e; border-radius:12px; margin-bottom:8px; cursor:pointer; }
+.friend-item .avatar { width:44px; height:44px; border-radius:50%; background:linear-gradient(135deg,#6c5ce7,#a29bfe); display:flex; align-items:center; justify-content:center; font-size:20px; }
+.friend-item .info { flex:1; }
+.friend-item .name { font-size:14px; font-weight:bold; }
+.friend-item .last { font-size:12px; color:#888; margin-top:2px; }
+.pending-badge { background:#ffd700; color:#1a1a2e; font-size:10px; padding:2px 8px; border-radius:8px; }
+.req-item { display:flex; align-items:center; gap:10px; padding:10px; background:#22223a; border-radius:10px; margin-bottom:6px; font-size:13px; }
+.req-item .btn-accept { background:#2a9d8f; }
+.req-item .btn-reject { background:#555; }
+.empty { text-align:center; color:#666; padding:60px 0; font-size:14px; }
+
+/* 聊天窗口 */
+.modal { display:none; position:fixed; inset:0; background:#0f0f1a; z-index:100; flex-direction:column; }
+.modal.show { display:flex; }
+.chat-header { background:#1a1a2e; padding:12px 16px; display:flex; align-items:center; gap:10px; }
+.chat-header .back { color:#ffd700; font-size:22px; cursor:pointer; }
+.chat-header .name { font-weight:bold; flex:1; }
+.icon-btn { background:none; border:none; color:#aaa; font-size:18px; cursor:pointer; padding:0 6px; }
+#dmBox { flex:1; overflow-y:auto; padding:16px; }
+.msg { margin-bottom:12px; }
+.msg .sender { font-size:11px; color:#888; margin-bottom:2px; }
+.msg .bubble { display:inline-block; padding:9px 13px; border-radius:12px; background:#1e1e30; max-width:75%; font-size:14px; word-break:break-word; }
+.msg.me { text-align:right; }
+.msg.me .bubble { background:#6c5ce7; }
+.input-bar { display:flex; padding:10px; background:#1a1a2e; gap:8px; }
+.input-bar input { flex:1; border:none; outline:none; padding:12px; border-radius:20px; background:#2a2a45; color:#fff; font-size:14px; }
+.input-bar button { border:none; background:#ffd700; color:#1a1a2e; padding:0 18px; border-radius:20px; font-weight:bold; cursor:pointer; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h2>💬 好友聊天</h2>
+    <button class="btn" onclick="showAddFriend()">＋ 添加好友</button>
+  </div>
+  <div class="list" id="requestList"></div>
+  <div class="list" id="friendList"><div class="empty">还没有好友，点右上角添加</div></div>
+
+  <!-- 添加好友弹窗 -->
+  <div class="modal" id="addModal" style="background:rgba(0,0,0,.8)">
+    <div style="margin:auto; background:#1a1a2e; padding:24px; border-radius:16px; width:80%; max-width:340px;">
+      <h3 style="margin-bottom:12px">🔍 搜索ID添加好友</h3>
+      <input id="addInput" placeholder="输入对方用户名" style="width:100%;padding:10px;border-radius:8px;border:1px solid #444;background:#2a2a45;color:#fff;margin-bottom:12px;">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" style="background:#555" onclick="document.getElementById('addModal').classList.remove('show')">取消</button>
+        <button class="btn" onclick="addFriend()">发送申请</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 私聊窗口 -->
+  <div class="modal" id="dmModal">
+    <div class="chat-header">
+      <span class="back" onclick="closeDM()">‹</span>
+      <span class="name" id="dmName"></span>
+      <button class="icon-btn" onclick="clearHistory()" title="清除聊天记录">🗑</button>
+      <button class="icon-btn" onclick="showReport()" title="举报">🚨</button>
+    </div>
+    <div id="dmBox"></div>
+    <div class="input-bar">
+      <input id="dmInput" placeholder="只能发送文字消息" onkeydown="if(event.key==='Enter')sendDM()">
+      <button onclick="sendDM()">发送</button>
+    </div>
+  </div>
+
+  <!-- 举报弹窗 -->
+  <div class="modal" id="reportModal" style="background:rgba(0,0,0,.8)">
+    <div style="margin:auto; background:#1a1a2e; padding:24px; border-radius:16px; width:85%; max-width:360px;">
+      <h3 style="margin-bottom:12px">🚨 举报用户</h3>
+      <div id="reportMsgList" style="max-height:300px; overflow-y:auto; margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" style="background:#555" onclick="document.getElementById('reportModal').classList.remove('show')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+let ws = null;
+let currentFriend = null;
+let currentHistory = [];
+
+function connect() {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem("token");
+    if (!token) { location.href = "/me"; return; }
+    ws = new WebSocket(`ws://${location.host}`);
+    ws.onopen = () => ws.send(JSON.stringify({ type:"auth", token }));
+    ws.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      if (d.type === "auth_ok") {
+        ws.send(JSON.stringify({ type:"friend_list" }));
+        resolve(); return;
+      }
+      if (d.type === "friend_list") renderFriends(d.friends, d.pending);
+      else if (d.type === "friend_request") {
+        if (confirm(`${d.from} 请求添加你为好友，是否接受？`)) {
+          ws.send(JSON.stringify({ type:"friend_accept", from:d.from }));
+        }
+      }
+      else if (d.type === "friend_accepted") { ws.send(JSON.stringify({ type:"friend_list" })); }
+      else if (d.type === "friend_deleted") { ws.send(JSON.stringify({ type:"friend_list" })); }
+      else if (d.type === "dm") {
+        if (currentFriend === d.from) addMsg(false, d.content);
+        ws.send(JSON.stringify({ type:"friend_list" }));
+      }
+      else if (d.type === "dm_history") { currentHistory = d.messages; renderHistory(); }
+      else if (d.type === "system") alert(d.content);
+      else if (d.type === "punish") { alert(d.content); location.href = "/me"; }
+      else if (d.type === "kicked") { alert(d.content); location.href = "/me"; }
+    };
+    ws.onerror = reject;
+  });
+}
+
+function renderFriends(friends, pending) {
+  const box = document.getElementById("friendList");
+  const reqBox = document.getElementById("requestList");
+  reqBox.innerHTML = (pending || []).map(p =>
+    `<div class="req-item"><span>📨 ${escapeHtml(p)} 请求添加你为好友</span>
+     <button class="btn btn-accept" onclick="acceptFriend('${escapeHtml(p)}')">接受</button></div>`).join("");
+  box.innerHTML = friends.length
+    ? friends.map(f => `
+      <div class="friend-item" onclick="openDM('${escapeHtml(f)}')">
+        <div class="avatar">🙂</div>
+        <div class="info">
+          <div class="name">${escapeHtml(f)}</div>
+          <div class="last">点击开始聊天</div>
+        </div>
+      </div>`).join("")
+    : `<div class="empty">还没有好友，点右上角添加</div>`;
+}
+
+function showAddFriend() {
+  document.getElementById("addModal").classList.add("show");
+  document.getElementById("addInput").focus();
+}
+
+function addFriend() {
+  const target = document.getElementById("addInput").value.trim();
+  if (!target) return;
+  ws.send(JSON.stringify({ type:"friend_request", target }));
+  document.getElementById("addModal").classList.remove("show");
+  document.getElementById("addInput").value = "";
+}
+
+function acceptFriend(from) {
+  ws.send(JSON.stringify({ type:"friend_accept", from }));
+}
+
+function deleteFriend() {
+  if (currentFriend && confirm(`确定删除好友 ${currentFriend} 吗？`)) {
+    ws.send(JSON.stringify({ type:"friend_delete", target: currentFriend }));
+    closeDM();
+  }
+}
+
+function openDM(friend) {
+  currentFriend = friend;
+  document.getElementById("dmName").textContent = friend;
+  document.getElementById("dmModal").classList.add("show");
+  document.getElementById("dmBox").innerHTML = "";
+  ws.send(JSON.stringify({ type:"dm_history", with: friend }));
+}
+
+function closeDM() {
+  document.getElementById("dmModal").classList.remove("show");
+  currentFriend = null;
+}
+
+function addMsg(isMe, text) {
+  const box = document.getElementById("dmBox");
+  box.insertAdjacentHTML("beforeend",
+    `<div class="msg ${isMe ? "me" : ""}"><div class="bubble">${escapeHtml(text)}</div></div>`);
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderHistory() {
+  const box = document.getElementById("dmBox");
+  box.innerHTML = "";
+  currentHistory.forEach(m => addMsg(m.sender === localStorage.getItem("username"), m.content));
+  box.scrollTop = box.scrollHeight;
+}
+
+function sendDM() {
+  const input = document.getElementById("dmInput");
+  const text = input.value.trim();
+  if (!text || !currentFriend) return;
+  addMsg(true, text);
+  ws.send(JSON.stringify({ type:"dm", to: currentFriend, content: text }));
+  input.value = "";
+}
+
+function clearHistory() {
+  if (currentFriend && confirm("确定清除和TA的聊天记录吗？此操作不可恢复")) {
+    ws.send(JSON.stringify({ type:"clear_history", with: currentFriend }));
+    document.getElementById("dmBox").innerHTML = "";
+  }
+}
+
+function showReport() {
+  const list = document.getElementById("reportMsgList");
+  list.innerHTML = currentHistory
+    .filter(m => m.sender === currentFriend)
+    .map(m => `
+      <div style="padding:8px;background:#22223a;border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px">${escapeHtml(m.content)}</span>
+        <button class="btn" style="background:#a4161a;padding:4px 10px" onclick="doReport('${escapeHtml(m.content).replace(/'/g,"\\'")}')">举报</button>
+      </div>`).join("") || "<div class='empty'>对方暂无消息可举报</div>";
+  document.getElementById("reportModal").classList.add("show");
+}
+
+function doReport(message) {
+  ws.send(JSON.stringify({ type:"report", reported: currentFriend, message }));
+  document.getElementById("reportModal").classList.remove("show");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>管理后台 - 时代少年团AI聊天</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,"PingFang SC",sans-serif; background:#111; color:#eee; padding:20px; max-width:900px; margin:0 auto; }
+h2 { margin-bottom:16px; color:#ffd700; }
+input, select { padding:10px; border-radius:8px; border:1px solid #444; background:#1e1e30; color:#eee; margin:4px; }
+button { padding:8px 14px; border:none; border-radius:8px; cursor:pointer; background:#0f3460; color:#fff; font-size:13px; }
+button.vip { background:#b8860b; }
+button.danger { background:#a4161a; }
+button.ok { background:#2a9d8f; }
+table { width:100%; border-collapse:collapse; margin-top:16px; font-size:13px; }
+th, td { padding:10px 8px; text-align:left; border-bottom:1px solid #333; }
+th { color:#ffd700; font-weight:normal; }
+.badge { padding:2px 8px; border-radius:10px; font-size:11px; display:inline-block; margin:1px; }
+.vip { background:#b8860b; }
+.banned { background:#a4161a; }
+.ok { background:#2a9d8f; }
+.warn { background:#e76f51; }
+#loginBox { text-align:center; margin-top:120px; }
+.stats { display:flex; gap:12px; margin:16px 0; flex-wrap:wrap; }
+.stat-card { background:#1e1e30; border-radius:12px; padding:14px 20px; text-align:center; }
+.stat-card .num { font-size:24px; font-weight:bold; color:#ffd700; }
+.stat-card .label { font-size:11px; color:#888; }
+.section { margin-top:24px; }
+.report-item { background:#1e1e30; border-radius:10px; padding:12px; margin-bottom:8px; font-size:13px; }
+</style>
+</head>
+<body>
+  <div id="loginBox">
+    <h2>🔐 管理员登录</h2>
+    <input id="pwd" type="password" placeholder="管理员密码" style="width:220px;">
+    <br>
+    <button onclick="loadData()">进入后台</button>
+  </div>
+
+  <div id="panel" style="display:none">
+    <h2>👑 时代少年团AI聊天 · 管理后台</h2>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="section">
+      <h3 style="margin-bottom:8px;">📋 用户管理</h3>
+      <input id="searchUser" placeholder="搜索用户名…" oninput="renderUsers()" style="width:200px;">
+      <table>
+        <thead>
+          <tr><th>用户名</th><th>状态</th><th>AI用量</th><th>注册时间</th><th>操作</th></tr>
+        </thead>
+        <tbody id="userTable"></tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h3 style="margin-bottom:8px;">🚨 举报记录</h3>
+      <div id="reportList"></div>
+    </div>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+let adminPwd = "";
+let allUsers = [];
+let allReports = [];
+
+async function loadData() {
+  adminPwd = $("pwd").value;
+  const headers = { "x-admin-password": adminPwd };
+
+  const [uRes, rRes] = await Promise.all([
+    fetch("/api/admin/users", { headers }),
+    fetch("/api/admin/reports", { headers }),
+  ]);
+
+  if (uRes.status === 401) { alert("密码错误"); return; }
+
+  const userData = await uRes.json();
+  const reportData = await rRes.json();
+  allUsers = userData.users;
+  allReports = reportData.reports;
+
+  $("loginBox").style.display = "none";
+  $("panel").style.display = "block";
+
+  // 统计
+  const total = allUsers.length;
+  const vips = allUsers.filter(u => u.vip_active).length;
+  const banned = allUsers.filter(u => u.banned_now).length;
+  $("stats").innerHTML = `
+    <div class="stat-card"><div class="num">${total}</div><div class="label">总用户</div></div>
+    <div class="stat-card"><div class="num">${vips}</div><div class="label">VIP用户</div></div>
+    <div class="stat-card"><div class="num">${banned}</div><div class="label">封禁中</div></div>`;
+
+  renderUsers();
+  renderReports();
+}
+
+async function act(username, action, value) {
+  const r = await fetch("/api/admin/action", {
+    method:"POST",
+    headers:{ "x-admin-password": adminPwd, "Content-Type":"application/json" },
+    body: JSON.stringify({ username, action, value }),
+  });
+  if (r.ok) loadData();
+  else alert("操作失败");
+}
+
+function banWithReason(username) {
+  const choice = prompt(
+    `封禁 ${username}：\n输入封禁时长：\n1 = 1天\n7 = 7天\nforever = 永久`,
+    "1"
+  );
+  if (choice === null) return;
+  act(username, "ban", choice.trim() === "forever" ? "forever" : Number(choice.trim()));
+}
+
+function vipWithPlan(username) {
+  const choice = prompt(
+    `给 ${username} 开通VIP：\n输入套餐：\nweek = 周卡(¥5)\nmonth = 月卡(¥10)\nyear = 年卡(¥20)`,
+    "month"
+  );
+  if (choice === null) return;
+  const plan = choice.trim().toLowerCase();
+  if (!["week","month","year"].includes(plan)) { alert("无效套餐"); return; }
+  act(username, "vip", plan);
+}
+
+function renderUsers() {
+  const q = $("searchUser").value.trim().toLowerCase();
+  const list = q ? allUsers.filter(u => u.username.toLowerCase().includes(q)) : allUsers;
+  $("userTable").innerHTML = list.map(u => `
+    <tr>
+      <td><b>${u.username}</b></td>
+      <td>
+        ${u.banned_now
+          ? `<span class="badge banned">${u.banned_until === 99999999999999 ? "永久封禁" : `封禁至 ${new Date(u.banned_until).toLocaleDateString()}`}</span>`
+          : `<span class="badge ok">正常</span>`}
+        ${u.vip_active
+          ? `<span class="badge vip">VIP至 ${new Date(u.vip_expire).toLocaleDateString()}</span>`
+          : ""}
+        ${u.warn_count > 0 ? `<span class="badge warn">警告${u.warn_count}次</span>` : ""}
+      </td>
+      <td>${u.ai_date === new Date().toISOString().slice(0,10) ? `${u.ai_used}/10句` : "今日未用"}</td>
+      <td>${new Date(u.created_at).toLocaleDateString()}</td>
+      <td>
+        ${u.banned_now
+          ? `<button class="ok" onclick="act('${u.username}','unban')">解封</button>`
+          : `<button class="danger" onclick="banWithReason('${u.username}')">封禁</button>`}
+        ${u.vip_active
+          ? `<button onclick="act('${u.username}','vip_off')">取消VIP</button>`
+          : `<button class="vip" onclick="vipWithPlan('${u.username}')">开VIP</button>`}
+      </td>
+    </tr>`).join("");
+}
+
+function renderReports() {
+  $("reportList").innerHTML = allReports.length
+    ? allReports.map(r => `
+      <div class="report-item">
+        <b>${r.reporter}</b> 举报了 <b>${r.reported}</b><br>
+        <span style="color:#e76f51">内容：${r.message}</span><br>
+        <span style="color:#666">${new Date(r.created_at).toLocaleString()}</span>
+        <button class="danger" style="margin-left:10px" onclick="act('${r.reported}','ban',1)">封1天</button>
+        <button onclick="act('${r.reported}','ban','forever')">永久封禁</button>
+      </div>`).join("")
+    : "<div style='color:#666;padding:20px 0;'>暂无举报</div>";
+}
+</script>
+</body>
+</html>

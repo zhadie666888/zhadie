@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>我的 - 时代少年团AI聊天</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,"PingFang SC",sans-serif; background:#0f0f1a; color:#fff; padding-bottom:70px; }
+.header { padding:32px 16px 20px; display:flex; align-items:center; gap:14px; }
+.big-avatar { width:72px; height:72px; border-radius:50%; background:linear-gradient(135deg,#6c5ce7,#a29bfe); display:flex; align-items:center; justify-content:center; font-size:34px; }
+.header .name { font-size:18px; font-weight:bold; }
+.header .sub { font-size:12px; color:#888; margin-top:4px; }
+.card { background:#1a1a2e; border-radius:14px; margin:0 16px 14px; padding:16px; }
+.card h3 { font-size:15px; margin-bottom:12px; color:#ffd700; }
+.vip-plans { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.plan { background:#22223a; border:2px solid transparent; border-radius:12px; padding:14px 8px; text-align:center; cursor:pointer; }
+.plan.selected { border-color:#ffd700; }
+.plan .p-name { font-size:13px; color:#ccc; }
+.plan .p-price { font-size:20px; font-weight:bold; color:#ffd700; margin:6px 0; }
+.plan .p-price small { font-size:11px; color:#888; }
+.btn-buy { width:100%; margin-top:12px; border:none; background:linear-gradient(90deg,#b8860b,#ffd700); color:#1a1a2e; padding:12px; border-radius:20px; font-weight:bold; font-size:14px; cursor:pointer; }
+.btn { border:none; padding:12px; border-radius:10px; width:100%; font-size:14px; cursor:pointer; margin-bottom:10px; }
+.btn-primary { background:#6c5ce7; color:#fff; }
+.btn-outline { background:transparent; color:#aaa; border:1px solid #444; }
+.vip-badge { display:inline-block; background:linear-gradient(90deg,#b8860b,#ffd700); color:#1a1a2e; font-size:11px; padding:2px 10px; border-radius:10px; margin-left:8px; font-weight:bold; }
+.vip-desc { font-size:12px; color:#888; line-height:1.8; margin-top:10px; }
+.menu-item { display:flex; justify-content:space-between; padding:14px 0; border-bottom:1px solid #22223a; font-size:14px; color:#ccc; }
+.menu-item:last-child { border-bottom:none; }
+input { width:100%; padding:12px; border-radius:10px; border:1px solid #444; background:#22223a; color:#fff; margin-bottom:10px; font-size:14px; }
+.tip { font-size:11px; color:#666; margin-top:8px; line-height:1.6; }
+</style>
+</head>
+<body>
+  <!-- 未登录状态 -->
+  <div id="loggedOut">
+    <div class="header">
+      <div class="big-avatar">👤</div>
+      <div>
+        <div class="name">未登录</div>
+        <div class="sub">登录后才能使用AI聊天和好友功能</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>账号登录</h3>
+      <div id="loginForm">
+        <input id="username" placeholder="用户名（2~16位，中英文数字下划线）">
+        <input id="password" type="password" placeholder="密码（6位以上，含小写字母+大写或数字）">
+        <button class="btn btn-primary" onclick="doAuth('/api/login')">登 录</button>
+        <button class="btn btn-outline" onclick="doAuth('/api/register')">注 册 新 账 号</button>
+        <div class="tip">· 无需手机号，用户名+密码即可注册<br>· 用户名含违禁词将被拒绝<br>· 头像为系统默认，暂不支持更改</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 已登录状态 -->
+  <div id="loggedIn" style="display:none">
+    <div class="header">
+      <div class="big-avatar">🙂</div>
+      <div>
+        <div class="name" id="myName"></div>
+        <div class="sub" id="mySub"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>💎 VIP会员</h3>
+      <div class="vip-plans" id="vipPlans">
+        <div class="plan" data-plan="week" onclick="selectPlan(this)">
+          <div class="p-name">周卡</div>
+          <div class="p-price">¥5<small>/7天</small></div>
+        </div>
+        <div class="plan" data-plan="month" onclick="selectPlan(this)">
+          <div class="p-name">月卡</div>
+          <div class="p-price">¥10<small>/30天</small></div>
+        </div>
+        <div class="plan" data-plan="year" onclick="selectPlan(this)">
+          <div class="p-name">年卡</div>
+          <div class="p-price">¥20<small>/365天</small></div>
+        </div>
+      </div>
+      <button class="btn-buy" onclick="buyVip()">立即开通</button>
+      <div class="vip-desc">
+        VIP特权：<br>
+        · AI智能聊天不限次数，随时倾诉情绪<br>
+        · 专属VIP标识（即将上线）<br>
+        · 更多特权陆续增加中…
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>⚙️ 其他</h3>
+      <div class="menu-item"><span>当前状态</span><span id="statusText">正常</span></div>
+      <button class="btn btn-outline" onclick="logout()">退出登录</button>
+    </div>
+  </div>
+
+<script>
+let selectedPlan = "month";
+
+function selectPlan(el) {
+  document.querySelectorAll(".plan").forEach(p => p.classList.remove("selected"));
+  el.classList.add("selected");
+  selectedPlan = el.dataset.plan;
+}
+
+async function doAuth(api) {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+  const r = await fetch(api, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await r.json();
+  if (!data.ok) { alert(data.error); return; }
+  localStorage.setItem("token", data.token);
+  localStorage.setItem("username", data.username);
+  showLoggedIn(data.username, data.is_vip);
+}
+
+function showLoggedIn(name, isVip) {
+  document.getElementById("loggedOut").style.display = "none";
+  document.getElementById("loggedIn").style.display = "block";
+  document.getElementById("myName").innerHTML = `${escapeHtml(name)}${isVip ? '<span class="vip-badge">VIP</span>' : ""}`;
+  document.getElementById("mySub").textContent = isVip ? "AI聊天无限畅聊中" : "免费用户 · 每日AI对话10句";
+}
+
+function logout() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("username");
+  location.reload();
+}
+
+async function buyVip() {
+  const token = localStorage.getItem("token");
+  if (!token) { alert("请先登录"); return; }
+  const PLAN_NAMES = { week:"周卡¥5", month:"月卡¥10", year:"年卡¥20" };
+  if (!confirm(`确认开通${PLAN_NAMES[selectedPlan]}？\n\n付款方式：请联系管理员（付款后管理员在后台为你开通）`)) return;
+  const r = await fetch("/api/vip/request", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ token, plan: selectedPlan }),
+  });
+  const data = await r.json();
+  alert(data.msg || data.error);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// 页面加载时检查登录态
+(async () => {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  // 简单验证：尝试请求VIP申请接口会副作用，这里直接信任本地token展示
+  showLoggedIn(localStorage.getItem("username") || "用户", localStorage.getItem("is_vip") === "1");
+})();
+</script>
+</body>
+</html>

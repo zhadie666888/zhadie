@@ -1,1 +1,43 @@
-1
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>时代少年团AI聊天</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+body { font-family:-apple-system,"PingFang SC",sans-serif; background:#0f0f1a; color:#fff; overflow:hidden; }
+#pageFrame { width:100%; height:calc(100% - 60px); border:none; background:#0f0f1a; }
+.tabbar { position:fixed; bottom:0; left:0; right:0; height:60px; background:#1a1a2e; display:flex; border-top:1px solid #2a2a45; z-index:999; }
+.tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#888; font-size:11px; cursor:pointer; gap:2px; }
+.tab .icon { font-size:20px; }
+.tab.active { color:#ffd700; }
+</style>
+</head>
+<body>
+  <iframe id="pageFrame" src="/home"></iframe>
+  <div class="tabbar">
+    <div class="tab active" data-page="/home" onclick="switchTab(this)">
+      <span class="icon">🏠</span><span>主页</span>
+    </div>
+    <div class="tab" data-page="/ai" onclick="switchTab(this)">
+      <span class="icon">🤖</span><span>AI</span>
+    </div>
+    <div class="tab" data-page="/chat" onclick="switchTab(this)">
+      <span class="icon">💬</span><span>聊天</span>
+    </div>
+    <div class="tab" data-page="/me" onclick="switchTab(this)">
+      <span class="icon">👤</span><span>我的</span>
+    </div>
+  </div>
+
+<script>
+function switchTab(el) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+  document.getElementById("pageFrame").src = el.dataset.page;
+}
+</script>
+</body>
+</html>
