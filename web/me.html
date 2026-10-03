@@ -119,11 +119,13 @@ async function doAuth(api) {
   showLoggedIn(data.username, data.is_vip);
 }
 
-function showLoggedIn(name, isVip) {
+function showLoggedIn(name, isVip, vipExpire) {
   document.getElementById("loggedOut").style.display = "none";
   document.getElementById("loggedIn").style.display = "block";
   document.getElementById("myName").innerHTML = `${escapeHtml(name)}${isVip ? '<span class="vip-badge">VIP</span>' : ""}`;
-  document.getElementById("mySub").textContent = isVip ? "AI聊天无限畅聊中" : "免费用户 · 每日AI对话10句";
+  document.getElementById("mySub").textContent = isVip
+    ? `AI聊天无限畅聊中 · VIP到期：${new Date(vipExpire).toLocaleString()}`
+    : "免费用户 · 每日AI对话10句";
 }
 
 function logout() {
@@ -150,12 +152,23 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
-// 页面加载时检查登录态
+// 页面加载时检查登录态：向服务器要最新状态（VIP、到期时间实时同步）
 (async () => {
   const token = localStorage.getItem("token");
   if (!token) return;
-  // 简单验证：尝试请求VIP申请接口会副作用，这里直接信任本地token展示
-  showLoggedIn(localStorage.getItem("username") || "用户", localStorage.getItem("is_vip") === "1");
+  try {
+    const r = await fetch("/api/me", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    const data = await r.json();
+    if (!data.ok) { logout(); return; }
+    localStorage.setItem("is_vip", data.is_vip ? "1" : "0");
+    showLoggedIn(data.username, data.is_vip, data.vip_expire);
+  } catch (e) {
+    showLoggedIn(localStorage.getItem("username") || "用户", localStorage.getItem("is_vip") === "1", 0);
+  }
 })();
 </script>
 </body>
