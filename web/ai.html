@@ -82,7 +82,7 @@ function connect() {
   return new Promise((resolve, reject) => {
     const token = localStorage.getItem("token");
     if (!token) { location.href = "/me"; return; }
-    ws = new WebSocket(SERVER.replace(/^http/, "ws") || `ws://${location.host}`);
+    ws = new WebSocket((SERVER ? SERVER.replace(/^http/, "ws") : "") || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`);
     ws.onopen = () => ws.send(JSON.stringify({ type:"auth", token }));
     ws.onmessage = (e) => {
       const d = JSON.parse(e.data);
