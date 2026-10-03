@@ -217,6 +217,22 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, token: issueToken(user.username), username: user.username, is_vip: vipValid(user) });
   }
 
+  // ---- 查询自己的最新状态（VIP、封禁等，以服务器为准）----
+  if (url === "/api/me" && req.method === "POST") {
+    const { token } = JSON.parse(await readBody(req));
+    const t = db.prepare("SELECT username FROM tokens WHERE token = ?").get(token);
+    if (!t) return json(res, 401, { error: "登录失效" });
+    const user = getUser(t.username);
+    if (!user) return json(res, 401, { error: "用户不存在" });
+    return json(res, 200, {
+      ok: true,
+      username: user.username,
+      is_vip: vipValid(user),
+      vip_expire: vipValid(user) ? user.vip_expire : 0,
+      banned_now: isBannedNow(user),
+    });
+  }
+
   // ---- VIP价格 / 购买申请 ----
   if (url === "/api/vip/request" && req.method === "POST") {
     const { token, plan } = JSON.parse(await readBody(req));
